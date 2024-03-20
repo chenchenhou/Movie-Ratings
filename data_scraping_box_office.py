@@ -4,9 +4,8 @@ import pandas as pd
 import os
 import requests
 
-links = pd.read_csv(
-    "/Users/panfucheng/Desktop/CMU/ETIM/Data Science/Final Project/ml-latest-small/links.csv"
-)
+# links = pd.read_csv("/Users/panfucheng/Desktop/CMU/ETIM/Data Science/Final Project/ml-latest-small/links.csv")
+links = pd.read_csv("data/links.csv")
 print(links.head())
 header = "https://www.boxofficemojo.com/title/"
 

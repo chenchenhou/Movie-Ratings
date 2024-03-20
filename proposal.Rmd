@@ -1,6 +1,6 @@
 ---
-title: "Untitled"
-author: "Zhengao.Chen"
+title: "Final Project Proposal"
+author: "Group 7"
 date: "2024-03-19"
 output: html_document
 ---
@@ -9,33 +9,16 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
-
 ```{r, warning = FALSE, message = FALSE}
 library(dplyr)
 library(tidyverse)
 library(ggplot2)
-links <- read.csv("C:/Users/11479/Desktop/R Proposal/links.csv")
-movies <- read.csv("C:/Users/11479/Desktop/R Proposal/movies.csv")
-ratings <- read.csv("C:/Users/11479/Desktop/R Proposal/ratings.csv")
+# links <- read.csv("C:/Users/11479/Desktop/R Proposal/links.csv")
+# movies <- read.csv("C:/Users/11479/Desktop/R Proposal/movies.csv")
+# ratings <- read.csv("C:/Users/11479/Desktop/R Proposal/ratings.csv")
+links <- read.csv("data/links.csv")
+movies <- read.csv("data/movies.csv")
+ratings <- read.csv("data/ratings.csv")
 head(ratings)
 ```
 
@@ -52,7 +35,7 @@ merged_data$genre_count <- str_count(merged_data$genres, "\\|") + 1
 ```
 
 ```{r, warning = FALSE, message = FALSE}
-#analyzing the rating range and distributions of the movies
+# Analyzing the rating range and distributions of the movies
 library(ggplot2)
 ggplot(merged_data, aes(x = avg_rating)) + geom_bar()
 q25 <- quantile(merged_data$avg_rating, probs = 0.25)
