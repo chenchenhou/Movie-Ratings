@@ -1,7 +1,8 @@
 import pandas as pd
 import os
 
-header = "/Users/panfucheng/Desktop/CMU/ETIM/Data Science/Final Project/Movie-Ratings/"
+# header = "/Users/panfucheng/Desktop/CMU/ETIM/Data Science/Final Project/Movie-Ratings/"
+header = "."
 dfs = []
 for i in range(10):
     csv_name = f"cast_{i*1000}_to_{i*1000+999}.csv"
