@@ -2,20 +2,33 @@
 title: "Final Project Proposal"
 author: "Group 7"
 date: "2024-03-19"
-output: html_document
+output: pdf_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+## Data Origin
+
+1.  **MovieLens-GroupLens Research**
+
+    Most of our current data is from the small version of the MovieLens dataset, collected and provided by GroupLens Research. The dataset includes several files, such as `movies.csv`, `ratings.csv`, and `links.csv`, which contain information about movies, user ratings, and external links to other movie databases. The MovieLens dataset is regularly updated and comes in different sizes, including the small version with 100,000 ratings applied to 9,000 movies by 600 users. The datasets are available for download from the GroupLens website.
+
+2.  **IMDb**
+
+    We wrote a Python crawler to scrape cast data from IMDb, obtaining `cast.csv`. IMDb is a comprehensive movie database that provides information about movies, TV shows, and celebrities. Our crawler extracted cast details for each movie, allowing us to enrich our dataset with additional information about the actors and actresses involved in the films. This data complements the MovieLens dataset, providing a more complete picture of the movies and their cast members.
+
+## Research Questions
+
+1.  Does the variety of content, as measured by the number of genres, influence the overall rating of movies?
+2.  Which genres have been more popular among viewers in the past three decades?
+3.  Which genres have generated more revenue and interest compared to others?
+4.  Does the popularity of top cast members necessarily lead to a larger consumer base and business success for movies?
+5.  When comparing movies where an actor is cast in their major genre versus movies where they are cast in other genres, which category is more likely to be welcomed by audiences and considered a business success?
 
 ```{r, warning = FALSE, message = FALSE}
 library(dplyr)
 library(tidyverse)
 library(ggplot2)
-# links <- read.csv("C:/Users/11479/Desktop/R Proposal/links.csv")
-# movies <- read.csv("C:/Users/11479/Desktop/R Proposal/movies.csv")
-# ratings <- read.csv("C:/Users/11479/Desktop/R Proposal/ratings.csv")
+
+# Read data
 links <- read.csv("data/links.csv")
 movies <- read.csv("data/movies.csv")
 ratings <- read.csv("data/ratings.csv")
@@ -23,46 +36,56 @@ head(ratings)
 ```
 
 ```{r, warning = FALSE, message = FALSE}
-
+# Generate x and y columns
 merged_data <- merge(x = links, y = movies, by = "movieId")
-ratings <- ratings %>% group_by(movieId) %>%
-  summarise(avg_rating=mean(rating))
-merged_data <- merge(x = ratings, y = merged_data, by = "movieId")
+ratings <- ratings %>% 
+  group_by(movieId) %>%
+  mutate(avg_rating = mean(rating))
 
-names(merged_data)
+merged_data <- merge(x = ratings, y = merged_data, by = "movieId")
 merged_data$genre_count <- str_count(merged_data$genres, "\\|") + 1
 
+# Fit model on current data
+model.train <- lm(avg_rating ~ genre_count, data = merged_data)
+predictions <- predict(model.train, newdata = merged_data)
+head(predictions)
 ```
+
+## Model Fitting
+
+To fit our model, we first count the number of genres each movie belongs to and create a new column called `genre_count`. Next, we calculate the average rating for each movie and store it in a column named `avg_rating`. Using `genre_count` as our independent variable (x) and `avg_rating` as our dependent variable (y), we then fit a linear model to explore the relationship between the number of genres a movie belongs to and its average rating.
+
+## Graph Plotting
+
+To explore our research questions, we have created several plots below.
 
 ```{r, warning = FALSE, message = FALSE}
 # Analyzing the rating range and distributions of the movies
-library(ggplot2)
-ggplot(merged_data, aes(x = avg_rating)) + geom_bar()
 q25 <- quantile(merged_data$avg_rating, probs = 0.25)
 q50 <- mean(merged_data$avg_rating)
 q75 <- quantile(merged_data$avg_rating, probs = 0.75)
 
 ggplot(merged_data, aes(x = avg_rating)) + 
-     geom_histogram(binwidth=0.5) + 
-     geom_vline(xintercept = q25, linetype="dashed", color = "blue", size=1) + 
-     geom_vline(xintercept = q75, linetype="dashed", color = "red", size=1) + 
-      geom_vline(xintercept=q50, linetype="dashed",color='purple',size=1) +
-     labs(title="rating range of the movie database", x="rating", y="amount") +
-    annotate("text", x = q25, y = 0, label = paste("25th:", q25), vjust = 1, color = "blue") +
+  geom_histogram(binwidth=0.5) + 
+  geom_vline(xintercept = q25, linetype="dashed", color = "blue", size=1) + 
+  geom_vline(xintercept = q75, linetype="dashed", color = "red", size=1) + 
+  geom_vline(xintercept=q50, linetype="dashed",color='purple',size=1) +
+  labs(title="rating range of the movie database", x="rating", y="amount") +
+  annotate("text", x = q25, y = 0, label = paste("25th:", q25), vjust = 1, color = "blue") +
   annotate("text", x = q50, y = 0, label = paste("50th:", q50), vjust = -1.5, color = "purple") +
   annotate("text", x = q75, y = 0, label = paste("75th:", q75), vjust = -2, color = "red")
 ```
 
-From the plot, some directional insights can be discerned:
-Central Tendency: A noticeable bulge in the bar height around the median rating signifies that a substantial number of movies receive average scores, which equals to around 3.5 This clustering around the median suggests that while some films score exceptionally high or low, most garner moderate ratings. Such a pattern could imply a consistent quality in the movie selection or a general tendency of the audience to rate movies as average.
+### Discussion
 
-Diversity in Ratings: The substantial distance between the 25th percentile (blue dashed line) and the 75th percentile (red dashed line) indicates a wide distribution of ratings. The bar chart has also indicated this pattern, where most of the rating lie in 3 and 4. Therefore, our analysis can be furthur directed in this way, to determine whether it will be a mediocore movie(rating of around 3), or a phenomenal movie(rating of more than 3)
+The plot provides some clear insights:
 
-This directs our analysis into more investigations to determine which features will influence the final ratings.
+1.  **Central Tendency:** The noticeable peak in the bar height around the median rating of approximately 3.5 suggests that a significant number of movies receive average scores. This concentration around the median indicates that while some films receive exceptionally high or low ratings, most are rated moderately. This pattern may reflect either a consistent quality in the movie selection or a general tendency of the audience to rate movies as average.
+2.  **Diversity in Ratings:** The considerable gap between the 25th percentile (blue dashed line) and the 75th percentile (red dashed line) points to a broad distribution of ratings. This is further evidenced by the bar chart, which shows most ratings falling between 3 and 4. Consequently, our analysis can be guided in this direction to ascertain whether a movie is likely to be mediocre (with a rating of around 3) or phenomenal (with a rating of more than 3).
 
+These observations lead our analysis to further investigate which features may influence the final ratings.
 
 ```{r, warning = FALSE, message = FALSE}
-
 genres_ratings_10 <- merged_data %>%
   group_by(genres) %>%
   summarise(average_rating = mean(avg_rating, na.rm = TRUE)) %>%
@@ -92,16 +115,13 @@ ggplot(genre_counts, aes(x = genres, y=count, fill=genres )) +
      geom_bar(stat="identity")
 ggplot(genre_counts_low, aes(x = genres, y=count,fill=genres )) + 
      geom_bar(stat="identity") 
-
-
 ```
 
-The bar chart depicts the count of movies with a rating greater than 4 across various genres. Drama leads significantly, suggesting a preference for this genre among highly-rated movies. Documentary and Comedy genres also show substantial counts, indicating their strong presence among movies with high ratings.
-In contrast, genres such as Action, Animation, Crime, Horror, Romance, and Thriller have notably fewer high-rated movies, with Horror having the least. This distribution implies that audiences and critics might favor storytelling and content often associated with Drama and Documentaries over the elements typically found in the other listed genres when it comes to highly-rated films.
+### Discussion
 
-From the bar graph of the genre counts for movies with a rating equal or less than 2. Drama, which dominated in higher ratings, appears less frequently here, indicating it is generally well-received. Comedy, the runner-up in higher ratings, is most prevalent among lower-rated movies, suggesting a polarized reception. Genres like Action and Thriller also appear more commonly at this lower rating spectrum, potentially reflecting a critical view of certain films within these genres. Sci-Fi and Romance show moderate counts, while Children's movies are least represented, suggesting these genres may fare moderately in terms of reception.
-Combining this with the summary for movies rated 4 and above, there is a noticeable contrast: genres that excel in higher ratings such as Drama and Documentary are less common among lower-rated movies. This could imply that well-executed dramas and documentaries resonate well with audiences, whereas comedies can be hit-or-miss. Action and Thriller genres, while not as frequent among top-rated movies, appear more at the lower end of ratings, which may indicate a consistency in lower critical reception or a divide in audience preference.
+The bar chart illustrates the distribution of movies with ratings above 4 across different genres. Drama stands out prominently, indicating a strong preference for this genre among highly-rated movies. The Documentary and Comedy genres also have significant representation, suggesting their appeal in high-quality films. In contrast, genres like Action, Animation, Crime, Horror, Romance, and Thriller have fewer movies with high ratings, with Horror being the least represented. This suggests that audiences and critics may favor the storytelling and content often associated with Drama and Documentaries over the characteristics typically found in the other mentioned genres for highly-rated films.
 
+The bar graph showing genre counts for movies with ratings of 2 or less reveals a different trend. Drama, which was dominant in higher ratings, is less prevalent here, suggesting it is generally well-received. Comedy, despite being popular in higher ratings, is the most common genre among lower-rated movies, indicating a divided reception. Action and Thriller genres also appear more frequently in this lower rating spectrum, possibly reflecting critical disdain for certain films within these genres. Sci-Fi and Romance have moderate counts, while Children's movies are the least represented, suggesting these genres may have moderate reception. Comparing this to the summary for movies rated 4 and above, there is a noticeable contrast: genres that excel in higher ratings, such as Drama and Documentary, are less common among lower-rated movies. This could imply that well-executed dramas and documentaries resonate well with audiences, whereas comedies can be hit-or-miss. Action and Thriller genres, while not as common among top-rated movies, appear more frequently at the lower end of the ratings spectrum, which may indicate a consistent lower critical reception or a split in audience preference.
 
 ```{r, warning = FALSE, message = FALSE}
 genrecount_rating <- merged_data %>%
@@ -112,13 +132,22 @@ ggplot(genrecount_rating, aes(x = genre_count, y=rating, fill=genre_count )) +
      geom_bar(stat="identity") 
 ```
 
-The bar chart appears to plot the relationship between the number of genres associated with a movie and its average rating. The trend suggests that movies encompassing a wider range of genres do not necessarily receive higher average ratings. Interestingly, films with a singular genre focus tend to have moderate ratings. There's a noticeable peak for movies that span approximately ten genres, which receive the highest average ratings, indicating a potential sweet spot where a broad genre diversity correlates with a higher appreciation from viewers or critics. However, the ratings dip slightly for movies with slightly fewer genres, around seven to nine, before peaking. This pattern might imply that beyond a certain point, adding more genres does not enhance a movie's reception and could even detract from its overall quality or coherence.
+### Discussion
 
+The bar chart seems to illustrate the relationship between the number of genres a movie spans and its average rating. The trend indicates that movies covering a broader range of genres do not necessarily garner higher average ratings. Notably, films with a single genre focus tend to receive moderate ratings. There is a distinct peak for movies that encompass around ten genres, which achieve the highest average ratings. This suggests a potential sweet spot where a wide diversity of genres correlates with greater appreciation from viewers or critics. However, the ratings slightly decline for movies with fewer genres, around seven to nine, before peaking. This pattern could suggest that beyond a certain threshold, adding more genres does not enhance a movie's reception and may even detract from its overall quality or coherence.
 
-Research Question:
-The variety of the content (numbers of the genres) influence the general rating?
-Which genres are more welcomed by the viewers in the past 3 decades?
-Which genres generated more revenues and interests than the others?
-Is the popularity of the top casts must lead to larger consumer base and business success of the movies?
-The actor casting in movies of his major genres vs the actor casting in movies of his genres, which kind of movies will be more welcomed and be more considered as a business success?
+## Future Analyses and Datasets
 
+For future analyses, we might consider incorporating additional datasets or conducting further investigations by Python crawler to address our research questions more comprehensively:
+
+1.  **Cast Data:** We have already utilized a Python crawler to obtain cast data and will continue to employ this technique to gather more comprehensive information about the actors and actresses involved in the films. This data is crucial for exploring the impact of star power on movie ratings and success.
+
+2.  **Temporal Trends:** Analyzing changes in genre popularity and movie ratings over time could provide insights into evolving audience preferences and industry trends.
+
+3.  **Revenue and Budget Data:** Integrating data on movie revenues and budgets could help us explore the financial success of different genres and the impact of star power on a movie's commercial performance.
+
+4.  **Social Media and Marketing Data:** Investigating the role of social media buzz and marketing campaigns in influencing movie popularity and ratings could offer a more holistic view of what drives audience interest and engagement.
+
+5.  **Audience Demographics:** Examining how different demographic groups (e.g., age, gender, region) respond to various genres and cast members could reveal targeted strategies for maximizing a movie's appeal.
+
+By expanding our dataset and employing a variety of analytical approaches, including continued Python crawling for additional cast data and other relevant information, we can deepen our understanding of the factors that influence movie ratings, genre popularity, and overall success in the film industry.
