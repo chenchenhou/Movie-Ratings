@@ -16,19 +16,12 @@ def scrapeCrew(url):  # scrape cast and crew from imdb
     if response.status_code == 200:
         soup = BeautifulSoup(response.content, "html.parser")
         spans = soup.find_all("span", class_="money")
-        for i in range(3):
-            rows = spans[i]
-            print(rows)
+        spans = spans[:3] + [spans[4]]
+        boxOffice = []
+        for s in spans:
+            s = s.text.strip()
+            s = s.replace("$", "").replace(",", "")
             assert 1 == 0
-            names = []
-            if header.strip().startswith("$"):
-                for row in rows[1:]:
-                    anchors = row.find_all("a")
-                    if len(anchors) >= 2:
-                        names.append(anchors[1].text.strip())
-                    else:
-                        continue
-                break
     else:
         names = []
     return names[:10] if len(names) >= 10 else names
