@@ -32,7 +32,6 @@ library(ggplot2)
 links <- read.csv("data/links.csv")
 movies <- read.csv("data/movies.csv")
 ratings <- read.csv("data/ratings.csv")
-head(ratings)
 ```
 
 ```{r, warning = FALSE, message = FALSE}
@@ -48,7 +47,22 @@ merged_data$genre_count <- str_count(merged_data$genres, "\\|") + 1
 # Fit model on current data
 model.train <- lm(avg_rating ~ genre_count, data = merged_data)
 predictions <- predict(model.train, newdata = merged_data)
-head(predictions)
+merged_data$predicted_rating <- predictions
+
+# Sample the data
+set.seed(123)
+sampled_data <- merged_data[sample(nrow(merged_data), min(1000, nrow(merged_data))), ]
+
+# Plot the ground truth vs predicted values
+ggplot(sampled_data, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating",
+       title = "Actual vs Predicted Ratings by Movie ID") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal() 
 ```
 
 ## Model Fitting
@@ -67,10 +81,10 @@ q75 <- quantile(merged_data$avg_rating, probs = 0.75)
 
 ggplot(merged_data, aes(x = avg_rating)) + 
   geom_histogram(binwidth=0.5) + 
-  geom_vline(xintercept = q25, linetype="dashed", color = "blue", size=1) + 
-  geom_vline(xintercept = q75, linetype="dashed", color = "red", size=1) + 
-  geom_vline(xintercept=q50, linetype="dashed",color='purple',size=1) +
-  labs(title="rating range of the movie database", x="rating", y="amount") +
+  geom_vline(xintercept = q25, linetype = "dashed", color = "blue", size=1) + 
+  geom_vline(xintercept = q75, linetype = "dashed", color = "red", size=1) + 
+  geom_vline(xintercept = q50, linetype = "dashed", color = 'purple', size=1) +
+  labs(title = "Rating Range of the Movie Database", x = "Rating", y = "Amount") +
   annotate("text", x = q25, y = 0, label = paste("25th:", q25), vjust = 1, color = "blue") +
   annotate("text", x = q50, y = 0, label = paste("50th:", q50), vjust = -1.5, color = "purple") +
   annotate("text", x = q75, y = 0, label = paste("75th:", q75), vjust = -2, color = "red")
@@ -111,9 +125,9 @@ genre_counts_low <- genres_separated_low %>%
   arrange(desc(count)) %>%
   slice_head(n=10)
 
-ggplot(genre_counts, aes(x = genres, y=count, fill=genres )) + 
+ggplot(genre_counts, aes(x = genres, y = count, fill=genres )) + 
      geom_bar(stat="identity")
-ggplot(genre_counts_low, aes(x = genres, y=count,fill=genres )) + 
+ggplot(genre_counts_low, aes(x = genres, y = count,fill=genres )) + 
      geom_bar(stat="identity") 
 ```
 
