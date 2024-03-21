@@ -6,56 +6,46 @@ import requests
 
 # links = pd.read_csv("/Users/panfucheng/Desktop/CMU/ETIM/Data Science/Final Project/ml-latest-small/links.csv")
 links = pd.read_csv("data/links.csv")
-print(links.head())
 header = "https://www.boxofficemojo.com/title/"
 
 
-def scrapeCrew(url):  # scrape cast and crew from imdb
+def scrapeBoxOffice(url):  # scrape cast and crew from imdb
     response = requests.get(url)
+    boxOffice = {
+        "Domestic": None,
+        "International": None,
+        "WorldWide": None,
+    }
     if response.status_code == 200:
         soup = BeautifulSoup(response.content, "html.parser")
-        spans = soup.find_all("span", class_="money")
-        spans = spans[:3] + [spans[4]]
-        boxOffice = []
-        for s in spans:
-            s = s.text.strip()
-            s = s.replace("$", "").replace(",", "")
-            assert 1 == 0
-    else:
-        names = []
-    return names[:10] if len(names) >= 10 else names
+        spans = soup.find_all("span", class_="a-size-medium a-text-bold")
+        revenueType = ["Domestic", "International", "WorldWide"]
+        for i in range(len(spans)):
+            s = spans[i].text.strip()
+            if len(s) == 1:
+                continue
+            s = int(s.replace("$", "").replace(",", ""))
+            boxOffice[revenueType[i]] = s
+    return boxOffice
 
 
-casts = []
-for imdb in links["imdbId"][1:2]:
+# url = os.path.join(header, "tt0114709")
+# boxOffice = scrapeBoxOffice(url)
+# url = os.path.join(header, "tt0112749")
+# boxOffice = scrapeBoxOffice(url)
+boxOffices = []
+for imdb in links["imdbId"]:
     if imdb:
         temp = imdb
         imdb = str(int(imdb))
         imdb = imdb.zfill(7)
         print(imdb)
         url = os.path.join(header, "tt" + imdb)
-        print(url)
-        cast = scrapeCrew(url)
-        cast = [temp] + cast
-        casts.append(cast)
+        boxOffice = scrapeBoxOffice(url)
+        boxOffice["imdbId"] = temp
+        boxOffices.append(boxOffice)
     else:
         continue
 
-# name_df = pd.DataFrame(
-#     casts,
-#     columns=[
-#         "imdbId",
-#         "Actor1",
-#         "Actor2",
-#         "Actor3",
-#         "Actor4",
-#         "Actor5",
-#         "Actor6",
-#         "Actor7",
-#         "Actor8",
-#         "Actor9",
-#         "Actor10",
-#     ],
-# )
-# print(name_df.head())
-# name_df.to_csv("cast_4000_to_4999.csv")
+boxOffice_df = pd.DataFrame(boxOffices)
+boxOffice_df.to_csv("boxOffice.csv")
