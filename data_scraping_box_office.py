@@ -4,7 +4,6 @@ import pandas as pd
 import os
 import requests
 
-# links = pd.read_csv("/Users/panfucheng/Desktop/CMU/ETIM/Data Science/Final Project/ml-latest-small/links.csv")
 links = pd.read_csv("data/links.csv")
 header = "https://www.boxofficemojo.com/title/"
 
@@ -29,10 +28,6 @@ def scrapeBoxOffice(url):  # scrape cast and crew from imdb
     return boxOffice
 
 
-# url = os.path.join(header, "tt0114709")
-# boxOffice = scrapeBoxOffice(url)
-# url = os.path.join(header, "tt0112749")
-# boxOffice = scrapeBoxOffice(url)
 boxOffices = []
 for imdb in links["imdbId"]:
     if imdb:
