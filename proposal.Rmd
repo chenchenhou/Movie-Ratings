@@ -32,6 +32,7 @@ library(ggplot2)
 links <- read.csv("data/links.csv")
 movies <- read.csv("data/movies.csv")
 ratings <- read.csv("data/ratings.csv")
+cast <- read.csv("data/cast.csv")
 ```
 
 ```{r, warning = FALSE, message = FALSE}
@@ -68,6 +69,48 @@ ggplot(sampled_data, aes(x = movieId)) +
 ## Model Fitting
 
 To fit our model, we first count the number of genres each movie belongs to and create a new column called `genre_count`. Next, we calculate the average rating for each movie and store it in a column named `avg_rating`. Using `genre_count` as our independent variable (x) and `avg_rating` as our dependent variable (y), we then fit a linear model to explore the relationship between the number of genres a movie belongs to and its average rating.
+
+```{r, warning = FALSE, message = FALSE}
+# Merge cast with previous data by imdbId
+merged_cast_data <- merge(cast, merged_data, by = "imdbId")
+
+# Create a function to count occurrences of each actor
+get_actor_frequency <- function(df) {
+  # Combine all actor columns and create a vector
+  actor_vector <- unlist(df[, grepl("Actor", names(df))])
+  # Count occurrences of each actor
+  actor_frequency <- table(actor_vector)
+  return(actor_frequency)
+}
+
+# Apply the function to your merged cast data
+actor_frequency <- get_actor_frequency(merged_cast_data)
+
+# Calculate the actor score for each movie
+merged_cast_data$actor_score <- apply(merged_cast_data[, grepl("Actor", names(merged_cast_data))], +
+                                 1, function(x) sum(actor_frequency[x]))
+
+# Fit model on data with both genre count and actor score
+model.train <- lm(avg_rating ~ genre_count + actor_score, data = merged_cast_data)
+predictions <- predict(model.train, newdata = merged_cast_data)
+merged_cast_data$predicted_cast_rating <- predictions
+
+# Sample the data
+set.seed(123)
+sampled_cast_data <- merged_cast_data[sample(nrow(merged_cast_data), min(1000, nrow(merged_cast_data))), ]
+
+# Plot the ground truth vs predicted values
+ggplot(sampled_cast_data, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_cast_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_cast_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", 
+       title = "Actual vs Predicted Ratings by Movie ID") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal()
+```
+
 
 ## Graph Plotting
 
