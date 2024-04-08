@@ -150,7 +150,6 @@ ggplot(sampled_cast_data, aes(x = movieId)) +
   theme_minimal()
 ```
 
-
 ## Graph Plotting
 
 To explore our research questions, we have created several plots below.
