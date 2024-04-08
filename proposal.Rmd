@@ -111,6 +111,45 @@ ggplot(sampled_cast_data, aes(x = movieId)) +
   theme_minimal()
 ```
 
+```{r, warning = FALSE, message = FALSE}
+# Filter the merged data to include only movies with a rating > 3.5
+movies_cast <- merge(cast, merged_data, by = "imdbId")
+good_movies <- movies_cast[movies_cast$avg_rating > 3.5, ]
+
+# Count actor occurrences only in good movies
+get_good_actor_frequency <- function(df) {
+  actor_vector <- unlist(df[, grepl("Actor", names(df))])
+  actor_frequency <- table(actor_vector)
+  return(actor_frequency)
+}
+
+# Apply the function to the filtered good movies data
+good_actor_frequency <- get_good_actor_frequency(good_movies)
+
+# Calculate the actor score for each movie based on good occurrences
+movies_cast$good_actor_score <- apply(movies_cast[, grepl("Actor", names(movies_cast))], 1, function(x) sum(good_actor_frequency[x]))
+
+# Update the model to use the new good_actor_score variable
+model.train <- lm(avg_rating ~ genre_count + good_actor_score, data = movies_cast)
+predictions <- predict(model.train, newdata = movies_cast)
+movies_cast$predicted_good_rating <- predictions
+
+# Sample the data
+set.seed(123)
+sampled_cast_data <- movies_cast[sample(nrow(movies_cast), min(1000, nrow(movies_cast))), ]
+
+# Plot the ground truth vs predicted values
+ggplot(sampled_cast_data, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_good_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_good_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", 
+       title = "Actual vs Predicted Ratings by Movie ID") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal()
+```
+
 
 ## Graph Plotting
 
