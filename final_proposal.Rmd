@@ -164,26 +164,52 @@ get_good_actor_frequency <- function(df) {
 # Apply the function to the filtered good movies data
 good_actor_frequency <- get_good_actor_frequency(good_movies)
 
-# Calculate the actor score for each movie based on good occurrences
-movies_cast$good_actor_score <- apply(movies_cast[, grepl("Actor", names(movies_cast))], 1, function(x) sum(good_actor_frequency[x]))
+# Calculate the sum actor score for each movie based on good occurrences
+movies_cast$sum_good_actor_score <- apply(movies_cast[, grepl("Actor", names(movies_cast))], 1, function(x) sum(good_actor_frequency[x]))
 
-# Update the model to use the new good_actor_score variable
-model.train <- lm(avg_rating ~ genre_count + good_actor_score, data = movies_cast)
-predictions <- predict(model.train, newdata = movies_cast)
-movies_cast$predicted_good_rating <- predictions
+# Calculate the average actor score for each movie based on good occurrences
+movies_cast$avg_good_actor_score <- apply(movies_cast[, grepl("Actor", names(movies_cast))], 1, function(x) {
+  # Filter out NULL or missing actor names and then look up their scores
+  valid_actors <- x[!is.na(x) & x != ""]
+  actor_scores <- good_actor_frequency[valid_actors]
 
-# Sample the data
+  # Check if actor_scores is not empty and contains non-NA values
+  if (!is.null(actor_scores) && length(actor_scores) > 0 && !any(is.na(actor_scores)) && sum(actor_scores, na.rm = TRUE) > 0) {
+    return(mean(actor_scores[actor_scores > 0], na.rm = TRUE))  # Calculate mean, ignoring NA values
+  } else {
+    return(0)  # return 0 if no valid actor scores
+  }
+})
+
+# Fit models
+model_sum <- lm(avg_rating ~ genre_count + sum_good_actor_score, data = movies_cast)
+model_avg <- lm(avg_rating ~ genre_count + avg_good_actor_score, data = movies_cast)
+
+# Predictions
+movies_cast$predicted_rating_sum <- predict(model_sum, newdata = movies_cast)
+movies_cast$predicted_rating_avg <- predict(model_avg, newdata = movies_cast)
+
+# Sampling for plots
 set.seed(123)
 sampled_cast_data <- movies_cast[sample(nrow(movies_cast), min(1000, nrow(movies_cast))), ]
 
-# Plot the ground truth vs predicted values
+# Plotting model_sum
 ggplot(sampled_cast_data, aes(x = movieId)) +
   geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
-  geom_point(aes(y = predicted_good_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating_sum, color = "Predicted Rating"), size = 1, alpha = 0.3) +
   geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
-  geom_smooth(aes(y = predicted_good_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
-  labs(x = "Movie ID", y = "Rating", 
-       title = "Actual vs Predicted Ratings by Movie ID") +
+  geom_smooth(aes(y = predicted_rating_sum, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Sum Actor Score") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal()
+
+# Plotting model_avg
+ggplot(sampled_cast_data, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating_avg, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating_avg, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Avg Actor Score") +
   scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
   theme_minimal()
 ```
