@@ -214,6 +214,48 @@ ggplot(sampled_cast_data, aes(x = movieId)) +
   theme_minimal()
 ```
 
+## Model Fitting - Genre Count + Good Actor Occurrences + Decade
+
+```{r, warning = FALSE, message = FALSE}
+# Extracting the year from the title and converting it to a decade
+movies_cast$title_decade <- gsub(".*\\((\\d{4})\\).*", "\\1", movies_cast$title)
+movies_cast$title_decade <- as.numeric(movies_cast$title_decade)
+movies_cast$decade <- (movies_cast$title_decade %/% 10) * 10
+
+# Fit models
+model_sum_decade <- lm(avg_rating ~ genre_count + sum_good_actor_score + decade, data = movies_cast)
+model_avg_decade <- lm(avg_rating ~ genre_count + avg_good_actor_score + decade, data = movies_cast)
+
+# Predictions
+movies_cast$predicted_rating_sum_decade <- predict(model_sum_decade, newdata = movies_cast)
+movies_cast$predicted_rating_avg_decade <- predict(model_avg_decade, newdata = movies_cast)
+
+# Sampling for plots
+set.seed(123)
+sampled_cast_data_decade <- movies_cast[sample(nrow(movies_cast), min(1000, nrow(movies_cast))), ]
+
+# Plotting model_sum_decade
+ggplot(sampled_cast_data_decade, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating_sum_decade, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating_sum_decade, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Sum Actor Score and Decade") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal()
+
+# Plotting model_avg_decade
+ggplot(sampled_cast_data_decade, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating_avg_decade, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating_avg_decade, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Avg Actor Score and Decade") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal()
+```
+
+
 ## Graph Plotting
 
 To explore our research questions, we have created several plots below.
