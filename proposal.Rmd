@@ -33,6 +33,7 @@ This document contains the updated checkpoint submission for our Final Group Pro
 library(dplyr)
 library(tidyverse)
 library(ggplot2)
+library(gbm)
 
 # Read data
 links <- read.csv("data/links.csv")

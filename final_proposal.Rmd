@@ -35,78 +35,26 @@ library(tidyverse)
 library(ggplot2)
 library(caret)
 library(stringr)
-
+library(gbm)
+set.seed(123)
 # Read data
 links <- read.csv("data/links.csv")
 movies <- read.csv("data/movies.csv")
 ratings <- read.csv("data/ratings.csv")
 cast <- read.csv("data/cast.csv")
-```
 
-## Model Fitting - Genre Count
-
-To fit our model, we first count the number of genres each movie belongs to and create a new column called `genre_count`. Next, we calculate the average rating for each movie and store it in a column named `avg_rating`. Using `genre_count` as our independent variable (x) and `avg_rating` as our dependent variable (y), we then fit a linear model to explore the relationship between the number of genres a movie belongs to and its average rating.
-
-The linear regression analysis exploring the relationship between the number of genres a movie belongs to (`genre_count`) and its average rating (`avg_rating`) shows statistically significant coefficients, with a p-value for `genre_count` less than 2.2e-16. However, the model's predictive power is minimal, as evidenced by a low $R^2$ of 0.004222, indicating that only about 0.42% of the variance in movie ratings is explained by genre count. The Root Mean Squared Error (RMSE) of approximately 0.564 on testing data suggests moderate prediction errors. This analysis suggests that while the relationship between genre count and average ratings is statistically significant, it is not practically significant, implying that additional variables likely play a more substantial role in determining movie ratings.
-
-```{r, warning = FALSE, message = FALSE}
-# Generate x and y columns
+# Data Preprocessing
 merged_data <- merge(x = links, y = movies, by = "movieId")
 ratings <- ratings %>% 
   group_by(movieId) %>%
   mutate(avg_rating = mean(rating))
-
 merged_data <- merge(x = ratings, y = merged_data, by = "movieId")
+
+# Add Genre Count
 merged_data$genre_count <- str_count(merged_data$genres, "\\|") + 1
 
-# Split data into training and testing sets
-set.seed(123)
-train_indices <- sample(seq_len(nrow(merged_data)), size = 0.7 * nrow(merged_data))
-train_data <- merged_data[train_indices, ]
-test_data <- merged_data[-train_indices, ]
-
-# Fit the linear model on training data
-model.train <- lm(avg_rating ~ genre_count, data = train_data)
-
-# Summary of the model to get R^2 and p-values
-summary(model.train)
-
-# Predict on testing data
-test_data$predicted_rating <- predict(model.train, newdata = test_data)
-
-# Evaluate the model using RMSE
-mse <- mean((test_data$predicted_rating - test_data$avg_rating)^2)
-rmse <- sqrt(mse)
-print(paste("Root Mean Squared Error: ", rmse))
-
-# Fit model on current data
-model.train <- lm(avg_rating ~ genre_count, data = merged_data)
-predictions <- predict(model.train, newdata = merged_data)
-merged_data$predicted_rating <- predictions
-
-# Sample the data
-set.seed(123)
-sampled_data <- merged_data[sample(nrow(merged_data), min(1000, nrow(merged_data))), ]
-
-# Plot the ground truth vs predicted values
-ggplot(sampled_data, aes(x = movieId)) +
-  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
-  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
-  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
-  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
-  labs(x = "Movie ID", y = "Rating",
-       title = "Actual vs Predicted Ratings by Movie ID") +
-  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
-  theme_minimal() 
-```
-
-## Model Fitting - Genre Count + Actor Occurrences
-
-In our second attempt, we introduced an actor score to our model, in addition to genre counts. For each actor, we calculated their actor score based on the number of times they appeared in all the movies. For each movie, the actor scores of all its actors were summed to obtain the movie's `actor_score`. We used `genre_count` and `actor_score` as our independent variables (x) and `avg_rating` as our dependent variable (y). A linear model was then fitted to explore the relationship between these variables and the average rating of the movies.
-
-```{r, warning = FALSE, message = FALSE}
-# Merge cast with previous data by imdbId
-merged_cast_data <- merge(cast, merged_data, by = "imdbId")
+# Merge Cast
+merged_data <- merge(cast, merged_data, by = "imdbId")
 
 # Create a function to count occurrences of each actor
 get_actor_frequency <- function(df) {
@@ -118,41 +66,29 @@ get_actor_frequency <- function(df) {
 }
 
 # Apply the function to your merged cast data
-actor_frequency <- get_actor_frequency(merged_cast_data)
+actor_frequency <- get_actor_frequency(merged_data)
+# Calculate actor_score, ignoring NAs
+merged_data$actor_score <- apply(merged_data[, grepl("Actor", names(merged_data))], 1, function(row_actors) {
+  # Remove NAs from the current row's actors
+  valid_actors <- row_actors[!is.na(row_actors)]
+  # Sum the frequencies of valid actors, defaulting to 0 if no valid actors
+  sum(actor_frequency[valid_actors], na.rm = TRUE)
+})
 
-# Calculate the actor score for each movie
-merged_cast_data$actor_score <- apply(merged_cast_data[, grepl("Actor", names(merged_cast_data))], +
-                                 1, function(x) sum(actor_frequency[x]))
+merged_data$avg_actor_score <- apply(merged_data[, grepl("Actor", names(merged_data))], 1, function(x) {
+  # Filter out NULL or missing actor names and then look up their scores
+  valid_actors <- x[!is.na(x) & x != ""]
+  actor_scores <- actor_frequency[valid_actors]
 
-# Fit model on data with both genre count and actor score
-model.train <- lm(avg_rating ~ genre_count + actor_score, data = merged_cast_data)
-predictions <- predict(model.train, newdata = merged_cast_data)
-merged_cast_data$predicted_cast_rating <- predictions
+  # Check if actor_scores is not empty and contains non-NA values
+  if (!is.null(actor_scores) && length(actor_scores) > 0 && !any(is.na(actor_scores)) && sum(actor_scores, na.rm = TRUE) > 0) {
+    return(mean(actor_scores[actor_scores > 0], na.rm = TRUE))  # Calculate mean, ignoring NA values
+  } else {
+    return(0)  # return 0 if no valid actor scores
+  }
+})
 
-# Sample the data
-set.seed(123)
-sampled_cast_data <- merged_cast_data[sample(nrow(merged_cast_data), min(1000, nrow(merged_cast_data))), ]
-
-# Plot the ground truth vs predicted values
-ggplot(sampled_cast_data, aes(x = movieId)) +
-  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
-  geom_point(aes(y = predicted_cast_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
-  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
-  geom_smooth(aes(y = predicted_cast_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
-  labs(x = "Movie ID", y = "Rating", 
-       title = "Actual vs Predicted Ratings by Movie ID") +
-  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
-  theme_minimal()
-```
-
-## Model Fitting - Genre Count + Good Actor Occurrences
-
-In our third attempt, we refined the actor score from our second attempt by considering only the number of appearances in movies with a rating higher than 3.5. We defined these as good movies. For each actor, we calculated their actor score based on their appearances in good movies. For each movie, we summed the actor scores of all its actors to obtain the movie's `good_actor_score`. We used `genre_count` and `good_actor_score` as our independent variables (x) and `avg_rating` as our dependent variable (y). A linear model was then fitted to explore the relationship between these variables and the average rating of the movies.
-
-```{r, warning = FALSE, message = FALSE}
-# Filter the merged data to include only movies with a rating > 3.5
-movies_cast <- merge(cast, merged_data, by = "imdbId")
-good_movies <- movies_cast[movies_cast$avg_rating > 3.5, ]
+good_movies <- merged_data[merged_data$avg_rating > 3.5, ]
 
 # Count actor occurrences only in good movies
 get_good_actor_frequency <- function(df) {
@@ -165,10 +101,27 @@ get_good_actor_frequency <- function(df) {
 good_actor_frequency <- get_good_actor_frequency(good_movies)
 
 # Calculate the sum actor score for each movie based on good occurrences
-movies_cast$sum_good_actor_score <- apply(movies_cast[, grepl("Actor", names(movies_cast))], 1, function(x) sum(good_actor_frequency[x]))
+#merged_data$sum_good_actor_score <- apply(merged_data[, grepl("Actor", names(merged_data))], 1, function(x) sum(good_actor_frequency[x], na.rm = TRUE))
+# Initialize the sum_good_actor_score column with zeros
+merged_data$sum_good_actor_score <- numeric(nrow(merged_data))
+
+# Iterate over each row to calculate the sum_good_actor_score
+for (i in seq_len(nrow(merged_data))) {
+  # If the movie's rating is greater than 3.5, calculate the score
+  if (merged_data$avg_rating[i] > 3.5) {
+    # Extract actor names as a vector, not as a list
+    actor_names <- unlist(merged_data[i, grepl("Actor", names(merged_data))])
+    # Sum the frequencies of these actors from the good_actor_frequency table, ignoring NA values
+    merged_data$sum_good_actor_score[i] <- sum(good_actor_frequency[actor_names], na.rm = TRUE)
+  }
+  # If the condition is not met, the score remains 0 as initialized
+}
+
+
+
 
 # Calculate the average actor score for each movie based on good occurrences
-movies_cast$avg_good_actor_score <- apply(movies_cast[, grepl("Actor", names(movies_cast))], 1, function(x) {
+merged_data$avg_good_actor_score <- apply(merged_data[, grepl("Actor", names(merged_data))], 1, function(x) {
   # Filter out NULL or missing actor names and then look up their scores
   valid_actors <- x[!is.na(x) & x != ""]
   actor_scores <- good_actor_frequency[valid_actors]
@@ -181,80 +134,278 @@ movies_cast$avg_good_actor_score <- apply(movies_cast[, grepl("Actor", names(mov
   }
 })
 
+# Extracting the year from the title and converting it to a decade
+merged_data$title_decade <- gsub(".*\\((\\d{4})\\).*", "\\1", merged_data$title)
+merged_data$title_decade <- as.numeric(merged_data$title_decade)
+merged_data$decade <- (merged_data$title_decade %/% 10) * 10
+
+# Remove duplicate
+merged_data <- merged_data %>% distinct(imdbId, .keep_all = TRUE)
+
+# Split data into training and testing sets
+train_indices <- sample(seq_len(nrow(merged_data)), size = 0.7 * nrow(merged_data))
+train_data <- merged_data[train_indices, ]
+test_data <- merged_data[-train_indices, ]
+
+```
+
+```{r}
+any(is.na(actor_frequency))
+```
+
+## Model Fitting (Linear Regression) - Genre Count
+
+To fit our model, we first count the number of genres each movie belongs to and create a new column called `genre_count`. Next, we calculate the average rating for each movie and store it in a column named `avg_rating`. Using `genre_count` as our independent variable (x) and `avg_rating` as our dependent variable (y), we then fit a linear model to explore the relationship between the number of genres a movie belongs to and its average rating.
+
+The linear regression analysis exploring the relationship between the number of genres a movie belongs to (`genre_count`) and its average rating (`avg_rating`) shows statistically significant coefficients, with a p-value for `genre_count` less than 2.2e-16. However, the model's predictive power is minimal, as evidenced by a low $R^2$ of 0.004222, indicating that only about 0.42% of the variance in movie ratings is explained by genre count. The Root Mean Squared Error (RMSE) of approximately 0.564 on testing data suggests moderate prediction errors. This analysis suggests that while the relationship between genre count and average ratings is statistically significant, it is not practically significant, implying that additional variables likely play a more substantial role in determining movie ratings.
+
+```{r, warning = FALSE, message = FALSE}
+# Fit the linear model on training data
+model.lm <- lm(avg_rating ~ genre_count, data = train_data)
+
+# Summary of the model to get R^2 and p-values
+summary(model.lm)
+
+# Predict on testing data
+test_data_lm <- test_data
+test_data_lm$predicted_rating <- predict(model.lm, newdata = test_data_lm)
+
+# Evaluate the model using RMSE
+mse <- mean((test_data_lm$predicted_rating - test_data_lm$avg_rating)^2)
+rmse <- sqrt(mse)
+print(paste("Root Mean Squared Error: ", rmse))
+
+# Plot the ground truth vs predicted values
+ggplot(test_data_lm, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating",
+       title = "Actual vs Predicted Ratings by Movie ID") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal() 
+```
+
+## Model Fitting (Gradient Boosting Machine) - Genre Count
+
+```{r, warning = FALSE, message = FALSE}
+# Fit the linear model on training data
+model.gbm <- gbm(avg_rating ~ genre_count, data = train_data, distribution = "gaussian", n.trees = 100, interaction.depth = 3, shrinkage = 0.01)
+
+# Summary of the model to get R^2 and p-values
+summary(model.gbm)
+
+# Predict on testing data
+test_data_gbm <- test_data
+test_data_gbm$predicted_rating <- predict(model.gbm, newdata = test_data_gbm)
+
+# Evaluate the model using RMSE
+mse <- mean((test_data_gbm$predicted_rating - test_data_gbm$avg_rating)^2)
+rmse <- sqrt(mse)
+print(paste("Root Mean Squared Error: ", rmse))
+
+# Plot the ground truth vs predicted values
+ggplot(test_data_gbm, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating",
+       title = "Actual vs Predicted Ratings by Movie ID") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal() 
+
+```
+
+## Model Fitting (Linear Regression) - Genre Count + Average Actor Occurrences
+
+In our second attempt, we introduced an actor score to our model, in addition to genre counts. For each actor, we calculated their actor score based on the number of times they appeared in all the movies. For each movie, the actor scores of all its actors were summed to obtain the movie's `actor_score`. We used `genre_count` and `actor_score` as our independent variables (x) and `avg_rating` as our dependent variable (y). A linear model was then fitted to explore the relationship between these variables and the average rating of the movies.
+
+```{r, warning = FALSE, message = FALSE}
+# Fit model on data with both genre count and actor score
+model.lm2 <- lm(avg_rating ~ genre_count + avg_actor_score, data = train_data)
+summary(model.lm2)
+test_data_lm2 <- test_data
+test_data_lm2$predicted_rating <- predict(model.lm2, newdata = test_data_lm2)
+# Evaluate the model using RMSE
+mse <- mean((test_data_lm2$predicted_rating - test_data_lm2$avg_rating)^2)
+rmse <- sqrt(mse)
+print(paste("Root Mean Squared Error: ", rmse))
+
+# Plot the ground truth vs predicted values
+ggplot(test_data_lm2, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating",
+       title = "Actual vs Predicted Ratings by Movie ID") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal() 
+```
+
+## Model Fitting (Gradient Boosting Machine) - Genre Count + Average Actor Occurrences
+
+```{r, warning = FALSE, message = FALSE}
+# Fit model on data with both genre count and actor score
+model.gbm2 <- gbm(avg_rating ~ genre_count + avg_actor_score, data = train_data, distribution = "gaussian", n.trees = 100, interaction.depth = 3, shrinkage = 0.01)
+summary(model.gbm2)
+test_data_gbm2 <- test_data
+test_data_gbm2$predicted_rating <- predict(model.gbm2, newdata = test_data_gbm2)
+# Evaluate the model using RMSE
+mse <- mean((test_data_gbm2$predicted_rating - test_data_gbm2$avg_rating)^2)
+rmse <- sqrt(mse)
+print(paste("Root Mean Squared Error: ", rmse))
+
+# Plot the ground truth vs predicted values
+ggplot(test_data_gbm2, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating",
+       title = "LM - Actual vs Predicted Ratings by Movie ID") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal() 
+
+```
+
+## Model Fitting (Linear Regression) - Genre Count + Good Actor Occurrences
+
+In our third attempt, we refined the actor score from our second attempt by considering only the number of appearances in movies with a rating higher than 3.5. We defined these as good movies. For each actor, we calculated their actor score based on their appearances in good movies. For each movie, we summed the actor scores of all its actors to obtain the movie's `good_actor_score`. We used `genre_count` and `good_actor_score` as our independent variables (x) and `avg_rating` as our dependent variable (y). A linear model was then fitted to explore the relationship between these variables and the average rating of the movies.
+
+```{r, warning = FALSE, message = FALSE}
 # Fit models
-model_sum <- lm(avg_rating ~ genre_count + sum_good_actor_score, data = movies_cast)
-model_avg <- lm(avg_rating ~ genre_count + avg_good_actor_score, data = movies_cast)
+model_sum_lm <- lm(avg_rating ~ genre_count + sum_good_actor_score, data = train_data)
+model_avg_lm <- lm(avg_rating ~ genre_count + avg_good_actor_score, data = train_data)
+print(summary(model_sum_lm))
+print(summary(model_avg_lm))
 
 # Predictions
-movies_cast$predicted_rating_sum <- predict(model_sum, newdata = movies_cast)
-movies_cast$predicted_rating_avg <- predict(model_avg, newdata = movies_cast)
+test_data_sum_lm <- test_data
+test_data_avg_lm <- test_data
+test_data_sum_lm$predicted_rating <- predict(model_sum_lm, newdata = test_data_sum_lm)
+test_data_avg_lm$predicted_rating <- predict(model_avg_lm, newdata = test_data_avg_lm)
 
-# Sampling for plots
-set.seed(123)
-sampled_cast_data <- movies_cast[sample(nrow(movies_cast), min(1000, nrow(movies_cast))), ]
+# Evaluate the model using RMSE
+mse_sum <- mean((test_data_sum_lm$predicted_rating - test_data_sum_lm$avg_rating)^2)
+rmse_sum <- sqrt(mse_sum)
+print(paste("Root Mean Squared Error (Sum of good actor score): ", rmse_sum))
+
+mse_avg <- mean((test_data_avg_lm$predicted_rating - test_data_avg_lm$avg_rating)^2)
+rmse_avg <- sqrt(mse_avg)
+print(paste("Root Mean Squared Error (Avg of good actor score): ", rmse_avg))
 
 # Plotting model_sum
-ggplot(sampled_cast_data, aes(x = movieId)) +
+ggplot(test_data_sum_lm, aes(x = movieId)) +
   geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
-  geom_point(aes(y = predicted_rating_sum, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
   geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
-  geom_smooth(aes(y = predicted_rating_sum, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
   labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Sum Actor Score") +
   scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
   theme_minimal()
 
 # Plotting model_avg
-ggplot(sampled_cast_data, aes(x = movieId)) +
+ggplot(test_data_avg_lm, aes(x = movieId)) +
   geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
-  geom_point(aes(y = predicted_rating_avg, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
   geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
-  geom_smooth(aes(y = predicted_rating_avg, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
   labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Avg Actor Score") +
   scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
   theme_minimal()
 ```
 
-## Model Fitting - Genre Count + Good Actor Occurrences + Decade
+## Model Fitting (Gradient Boosting Machine) - Genre Count + Good Actor Occurrences
 
 ```{r, warning = FALSE, message = FALSE}
-# Extracting the year from the title and converting it to a decade
-movies_cast$title_decade <- gsub(".*\\((\\d{4})\\).*", "\\1", movies_cast$title)
-movies_cast$title_decade <- as.numeric(movies_cast$title_decade)
-movies_cast$decade <- (movies_cast$title_decade %/% 10) * 10
-
 # Fit models
-model_sum_decade <- lm(avg_rating ~ genre_count + sum_good_actor_score + decade, data = movies_cast)
-model_avg_decade <- lm(avg_rating ~ genre_count + avg_good_actor_score + decade, data = movies_cast)
+model_sum_gbm <- gbm(avg_rating ~ genre_count + sum_good_actor_score, data = train_data, distribution = "gaussian", n.trees = 100, interaction.depth = 3, shrinkage = 0.01)
+model_avg_gbm <- gbm(avg_rating ~ genre_count + avg_good_actor_score, data = train_data, distribution = "gaussian", n.trees = 100, interaction.depth = 3, shrinkage = 0.01)
+print(summary(model_sum_gbm))
+print(summary(model_avg_gbm))
 
 # Predictions
-movies_cast$predicted_rating_sum_decade <- predict(model_sum_decade, newdata = movies_cast)
-movies_cast$predicted_rating_avg_decade <- predict(model_avg_decade, newdata = movies_cast)
+test_data_sum_gbm <- test_data
+test_data_avg_gbm <- test_data
+test_data_sum_gbm$predicted_rating <- predict(model_sum_gbm, newdata = test_data_sum_gbm)
+test_data_avg_gbm$predicted_rating <- predict(model_avg_gbm, newdata = test_data_avg_gbm)
 
-# Sampling for plots
-set.seed(123)
-sampled_cast_data_decade <- movies_cast[sample(nrow(movies_cast), min(1000, nrow(movies_cast))), ]
+# Evaluate the model using RMSE
+mse_sum <- mean((test_data_sum_gbm$predicted_rating - test_data_sum_gbm$avg_rating)^2)
+rmse_sum <- sqrt(mse_sum)
+print(paste("Root Mean Squared Error: ", rmse_sum))
 
-# Plotting model_sum_decade
-ggplot(sampled_cast_data_decade, aes(x = movieId)) +
+mse_avg <- mean((test_data_avg_gbm$predicted_rating - test_data_avg_gbm$avg_rating)^2)
+rmse_avg <- sqrt(mse_avg)
+print(paste("Root Mean Squared Error: ", rmse_avg))
+
+# Plotting model_sum
+ggplot(test_data_sum_gbm, aes(x = movieId)) +
   geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
-  geom_point(aes(y = predicted_rating_sum_decade, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
   geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
-  geom_smooth(aes(y = predicted_rating_sum_decade, color = "Predicted Rating"), method = "loess", se = FALSE) +
-  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Sum Actor Score and Decade") +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Sum Actor Score") +
   scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
   theme_minimal()
 
-# Plotting model_avg_decade
-ggplot(sampled_cast_data_decade, aes(x = movieId)) +
+# Plotting model_avg
+ggplot(test_data_avg_gbm, aes(x = movieId)) +
   geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
-  geom_point(aes(y = predicted_rating_avg_decade, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
   geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
-  geom_smooth(aes(y = predicted_rating_avg_decade, color = "Predicted Rating"), method = "loess", se = FALSE) +
-  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Avg Actor Score and Decade") +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Avg Actor Score") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal()
+
+```
+
+## Model Fitting (Linear Regression) - Genre Count + Good Actor Occurrences + Decade
+
+```{r, warning = FALSE, message = FALSE}
+# Fit models
+model_sum_decade_lm <- lm(avg_rating ~ genre_count + sum_good_actor_score + decade, data = train_data)
+model_avg_decade_lm <- lm(avg_rating ~ genre_count + avg_good_actor_score + decade, data = train_data)
+
+# Predictions
+test_data_sum_decade_lm <- test_data
+test_data_avg_decade_lm <- test_data
+test_data_sum_decade_lm$predicted_rating <- predict(model_sum_decade_lm, newdata = test_data_sum_decade_lm)
+test_data_avg_decade_lm$predicted_rating <- predict(model_avg_decade_lm, newdata = test_data_avg_decade_lm)
+
+# Evaluate the model using RMSE
+mse_sum <- mean((test_data_sum_decade_lm$predicted_rating - test_data_sum_decade_lm$avg_rating)^2, na.rm=TRUE)
+rmse_sum <- sqrt(mse_sum)
+print(paste("Root Mean Squared Error (Sum of good actor score): ", rmse_sum))
+
+mse_avg <- mean((test_data_avg_decade_lm$predicted_rating - test_data_avg_decade_lm$avg_rating)^2, na.rm = TRUE)
+rmse_avg <- sqrt(mse_avg)
+print(paste("Root Mean Squared Error (Avg of good actor score): ", rmse_avg))
+
+# Plotting model_sum
+ggplot(test_data_sum_decade_lm, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Sum Actor Score") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal()
+
+# Plotting model_avg
+ggplot(test_data_avg_decade_lm, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Avg Actor Score") +
   scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
   theme_minimal()
 ```
-
 
 ## Graph Plotting
 
