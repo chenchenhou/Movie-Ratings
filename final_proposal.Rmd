@@ -146,11 +146,6 @@ merged_data <- merged_data %>% distinct(imdbId, .keep_all = TRUE)
 train_indices <- sample(seq_len(nrow(merged_data)), size = 0.7 * nrow(merged_data))
 train_data <- merged_data[train_indices, ]
 test_data <- merged_data[-train_indices, ]
-
-```
-
-```{r}
-any(is.na(actor_frequency))
 ```
 
 ## Model Fitting (Linear Regression) - Genre Count
