@@ -42,6 +42,7 @@ links <- read.csv("data/links.csv")
 movies <- read.csv("data/movies.csv")
 ratings <- read.csv("data/ratings.csv")
 cast <- read.csv("data/cast.csv")
+boxOffice <- read.csv("data/boxOffice.csv")
 
 # Data Preprocessing
 merged_data <- merge(x = links, y = movies, by = "movieId")
@@ -49,6 +50,10 @@ ratings <- ratings %>%
   group_by(movieId) %>%
   mutate(avg_rating = mean(rating))
 merged_data <- merge(x = ratings, y = merged_data, by = "movieId")
+merged_data <- inner_join(merged_data, boxOffice, by="imdbId")
+merged_data <- merged_data %>% select(-c("Domestic", "International"))
+merged_data <- merged_data %>%
+  filter(!is.na(WorldWide))
 
 # Add Genre Count
 merged_data$genre_count <- str_count(merged_data$genres, "\\|") + 1
@@ -446,6 +451,97 @@ ggplot(test_data_avg_decade_gbm, aes(x = movieId)) +
   scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
   theme_minimal()
 
+```
+
+## Model Fitting (Linear Regression) - Genre Count + Good Actor Occurrences + WorldWide Box Office
+
+```{r, warning = FALSE, message = FALSE}
+# Fit models
+model_sum_box_lm <- lm(avg_rating ~ genre_count + sum_good_actor_score + WorldWide, data = train_data)
+model_avg_box_lm <- lm(avg_rating ~ genre_count + avg_good_actor_score + WorldWide, data = train_data)
+print(summary(model_sum_box_lm))
+print(summary(model_avg_box_lm))
+
+# Predictions
+test_data_sum_box_lm <- test_data
+test_data_avg_box_lm <- test_data
+test_data_sum_box_lm$predicted_rating <- predict(model_sum_box_lm, newdata = test_data_sum_box_lm)
+test_data_avg_box_lm$predicted_rating <- predict(model_avg_box_lm, newdata = test_data_avg_box_lm)
+
+# Evaluate the model using RMSE
+mse_sum <- mean((test_data_sum_box_lm$predicted_rating - test_data_sum_box_lm$avg_rating)^2)
+rmse_sum <- sqrt(mse_sum)
+print(paste("Root Mean Squared Error (Sum of good actor score): ", rmse_sum))
+
+mse_avg <- mean((test_data_avg_box_lm$predicted_rating - test_data_avg_box_lm$avg_rating)^2)
+rmse_avg <- sqrt(mse_avg)
+print(paste("Root Mean Squared Error (Avg of good actor score): ", rmse_avg))
+
+# Plotting model_sum
+ggplot(test_data_sum_box_lm, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Sum Actor Score") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal()
+
+# Plotting model_avg
+ggplot(test_data_avg_box_lm, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Avg Actor Score") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal()
+
+```
+
+## Model Fitting (Gradient Boosting Machine) - Genre Count + Good Actor Occurrences + WorldWide Box Office
+
+```{r, warning = FALSE, message = FALSE}
+# Fit models
+model_sum_box_gbm <- gbm(avg_rating ~ genre_count + sum_good_actor_score + WorldWide, data = train_data, distribution = "gaussian", n.trees = 100, interaction.depth = 3, shrinkage = 0.01)
+model_avg_box_gbm <- gbm(avg_rating ~ genre_count + avg_good_actor_score + WorldWide, data = train_data, distribution = "gaussian", n.trees = 100, interaction.depth = 3, shrinkage = 0.01)
+print(summary(model_sum_box_gbm))
+print(summary(model_avg_box_gbm))
+
+# Predictions
+test_data_sum_box_gbm <- test_data
+test_data_avg_box_gbm <- test_data
+test_data_sum_box_gbm$predicted_rating <- predict(model_sum_box_gbm, newdata = test_data_sum_box_gbm)
+test_data_avg_box_gbm$predicted_rating <- predict(model_avg_box_gbm, newdata = test_data_avg_box_gbm)
+
+# Evaluate the model using RMSE
+mse_sum <- mean((test_data_sum_box_gbm$predicted_rating - test_data_sum_box_gbm$avg_rating)^2)
+rmse_sum <- sqrt(mse_sum)
+print(paste("Root Mean Squared Error: ", rmse_sum))
+
+mse_avg <- mean((test_data_avg_box_gbm$predicted_rating - test_data_avg_box_gbm$avg_rating)^2)
+rmse_avg <- sqrt(mse_avg)
+print(paste("Root Mean Squared Error: ", rmse_avg))
+
+# Plotting model_sum
+ggplot(test_data_sum_box_gbm, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Sum Actor Score") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal()
+
+# Plotting model_avg
+ggplot(test_data_avg_box_gbm, aes(x = movieId)) +
+  geom_point(aes(y = avg_rating, color = "Actual Average Rating"), size = 1, alpha = 0.3) +
+  geom_point(aes(y = predicted_rating, color = "Predicted Rating"), size = 1, alpha = 0.3) +
+  geom_smooth(aes(y = avg_rating, color = "Actual Average Rating"), method = "loess", se = FALSE) +
+  geom_smooth(aes(y = predicted_rating, color = "Predicted Rating"), method = "loess", se = FALSE) +
+  labs(x = "Movie ID", y = "Rating", title = "Actual vs Predicted Ratings with Avg Actor Score") +
+  scale_color_manual(values = c("Actual Average Rating" = "blue", "Predicted Rating" = "red")) +
+  theme_minimal()
 ```
 
 ## Graph Plotting
