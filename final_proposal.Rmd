@@ -5,10 +5,6 @@ date: "`r Sys.Date()`"
 output: pdf_document
 ---
 
-## Introduction
-
-This document contains the updated checkpoint submission for our Final Group Project. We have thoroughly reviewed the feedback provided and incorporated suggested actions to enhance our project. This document includes all the code and visualizations used in our analysis.
-
 ## Data Origin
 
 1.  **MovieLens-GroupLens Research**
@@ -25,7 +21,7 @@ This document contains the updated checkpoint submission for our Final Group Pro
 2.  Which genres have been more popular among viewers in the past three decades?
 3.  Which genres have generated more revenue and interest compared to others?
 4.  Does the popularity of top cast members necessarily lead to a larger consumer base and business success for movies?
-5.  When comparing movies where an actor is cast in their major genre versus movies where they are cast in other genres, which category is more likely to be welcomed by audiences and considered a business success?
+5.  Does the frequent casting of popular actors in high-quality films necessarily result in higher audience preference and improved ratings for those movies?
 
 ## Import Libraries and Data
 
@@ -645,10 +641,8 @@ By expanding our dataset and employing a variety of analytical approaches, inclu
 
 ### Model
 
-Currently, our primary focus has been on feature extraction and analysis. We have employed a linear model to examine the relationships between various variables. Moving forward, we intend to explore a range of modeling approaches to gain a deeper understanding of the factors influencing movie ratings and success. By constructing and comparing different models, we aim to identify more nuanced relationships and potentially uncover new insights into the dynamics of the film industry.
+Currently, our primary focus has been on feature extraction and analysis. We have employed a linear regression model and a gradient boosting machine to examine the relationships between various variables. Moving forward, we intend to explore a range of modeling approaches to gain a deeper understanding of the factors influencing movie ratings and success. By constructing and comparing different models, we aim to identify more nuanced relationships and potentially uncover new insights into the dynamics of the film industry.
 
 ## Conclusion
 
 In this proposal, we have undertaken an extensive analysis of movie ratings and their influencing factors, using datasets from MovieLens and IMDb. We have explored the impact of genre diversity, cast popularity, and other factors on movie ratings. Our findings suggest that while a broader range of genres and star power can positively influence ratings, the relationship is complex and warrants further investigation.
-
-Moving forward, we aim to expand our dataset and employ more sophisticated modeling techniques to uncover deeper insights. By continuously refining our approach and incorporating additional data sources, we hope to provide a more comprehensive understanding of the factors that contribute to a movie's success and appeal. Our goal is to not only enhance our analytical skills but also to contribute meaningful knowledge to the field of film analytics.
